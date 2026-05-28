@@ -26,9 +26,17 @@ dependencies {
 	implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.2")
 	implementation("tools.jackson.module:jackson-module-kotlin")
 	implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core")
+
+	implementation("org.springframework.boot:spring-boot-starter-liquibase")
 	testImplementation("org.springframework.boot:spring-boot-starter-data-jpa-test")
 	testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
 	testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
+	testImplementation("org.mockito.kotlin:mockito-kotlin:5.4.0")
+	testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test")
+
+	testImplementation("org.testcontainers:testcontainers-junit-jupiter:2.0.5")
+	testImplementation("org.testcontainers:testcontainers-postgresql:2.0.5")
+
 	testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 	runtimeOnly("org.postgresql:postgresql:42.7.3")
 }

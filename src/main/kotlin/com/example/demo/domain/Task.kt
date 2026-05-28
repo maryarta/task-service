@@ -22,13 +22,19 @@ data class Task (
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
+    val type: TaskType,
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
     var status: TaskStatus,
 
     @Column(name = "created_at", nullable = false)
     val createdAt: Instant,
 
+    @Column(name = "result")
+    var result: String? = null,
+
     @Column(name = "error_message", columnDefinition = "TEXT")
     var errorMessage: String? = null
-
 
 )
