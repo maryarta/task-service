@@ -1,11 +1,11 @@
-package com.example.demo
+package com.example.taskservice
 
-import com.example.demo.domain.Task
-import com.example.demo.domain.TaskStatus
-import com.example.demo.domain.TaskType
-import com.example.demo.dto.CreateTaskRequest
-import com.example.demo.repository.TaskRepository
-import com.example.demo.service.TaskService
+import com.example.taskservice.domain.Task
+import com.example.taskservice.domain.TaskStatus
+import com.example.taskservice.domain.TaskType
+import com.example.taskservice.dto.CreateTaskRequest
+import com.example.taskservice.repository.TaskRepository
+import com.example.taskservice.service.TaskService
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.BeforeEach
