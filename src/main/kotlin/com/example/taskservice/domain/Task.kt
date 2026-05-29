@@ -1,4 +1,4 @@
-package com.example.demo.domain
+package com.example.taskservice.domain
 
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
@@ -12,7 +12,7 @@ import java.time.Instant
 
 @Entity
 @Table(name = "tasks")
-data class Task (
+class Task (
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     val id: Long? = null,
@@ -30,6 +30,9 @@ data class Task (
 
     @Column(name = "created_at", nullable = false)
     val createdAt: Instant,
+
+    @Column(name = "started_at")
+    var startedAt: Instant? = null,
 
     @Column(name = "result")
     var result: String? = null,

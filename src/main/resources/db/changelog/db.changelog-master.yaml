@@ -33,6 +33,9 @@ databaseChangeLog:
                   constraints:
                     nullable: false
               - column:
+                  name: started_at
+                  type: TIMESTAMP WITH TIME ZONE
+              - column:
                   name: result
                   type: TEXT
               - column:

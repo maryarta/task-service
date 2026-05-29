@@ -1,4 +1,4 @@
-package com.example.demo.domain
+package com.example.taskservice.domain
 
 enum class TaskStatus {
     CREATED,

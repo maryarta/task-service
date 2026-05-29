@@ -1,4 +1,4 @@
-package com.example.demo.exception
+package com.example.taskservice.exception
 
 import org.springframework.dao.InvalidDataAccessApiUsageException
 import org.springframework.http.HttpStatus
@@ -49,5 +49,12 @@ class ApiExceptionHandler {
         return ResponseEntity
             .badRequest()
             .body(ApiError("Invalid sort parameter. Use format: sort=createdAt,desc"))
+    }
+
+    @ExceptionHandler(IllegalArgumentException::class)
+    fun handleIllegalArgument(exception: IllegalArgumentException): ResponseEntity<ApiError> {
+        return ResponseEntity
+            .badRequest()
+            .body(ApiError(exception.message ?: "Invalid request parameter"))
     }
 }

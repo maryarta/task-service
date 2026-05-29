@@ -1,12 +1,13 @@
-package com.example.demo.controller
+package com.example.taskservice.controller
 
-import com.example.demo.dto.CreateTaskRequest
-import com.example.demo.domain.Task
-import com.example.demo.domain.TaskStatus
-import com.example.demo.domain.TaskType
-import com.example.demo.service.TaskService
+import com.example.taskservice.dto.CreateTaskRequest
+import com.example.taskservice.domain.Task
+import com.example.taskservice.domain.TaskStatus
+import com.example.taskservice.domain.TaskType
+import com.example.taskservice.service.TaskService
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.responses.ApiResponse
+import jakarta.validation.Valid
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.data.domain.Sort
@@ -68,7 +69,7 @@ class TaskController (private val taskService: TaskService) {
     @ApiResponse(responseCode = "201", description = "Task created")
     @ApiResponse(responseCode = "400", description = "Invalid request body")
     @PostMapping
-    fun createTask(@RequestBody request: CreateTaskRequest): ResponseEntity<Task> {
+    fun createTask(@Valid @RequestBody request: CreateTaskRequest): ResponseEntity<Task> {
         val task = taskService.create(request)
         return ResponseEntity.status(HttpStatus.CREATED).body(task)
     }

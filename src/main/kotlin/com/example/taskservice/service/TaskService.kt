@@ -1,21 +1,22 @@
-package com.example.demo.service
+package com.example.taskservice.service
 
-import com.example.demo.dto.CreateTaskRequest
-import com.example.demo.domain.Task
-import com.example.demo.domain.TaskStatus
-import com.example.demo.domain.TaskType
-import com.example.demo.exception.InvalidTaskStatusException
-import com.example.demo.exception.TaskNotFoundException
-import com.example.demo.repository.TaskRepository
+import com.example.taskservice.dto.CreateTaskRequest
+import com.example.taskservice.domain.Task
+import com.example.taskservice.domain.TaskStatus
+import com.example.taskservice.domain.TaskType
+import com.example.taskservice.exception.InvalidTaskStatusException
+import com.example.taskservice.exception.TaskNotFoundException
+import com.example.taskservice.repository.TaskRepository
 import jakarta.persistence.criteria.Predicate
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.domain.Specification
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
 
 @Service
-class TaskService (val taskRepository: TaskRepository, val taskQueue: TaskQueue) {
+class TaskService (private val taskRepository: TaskRepository) {
 
     fun findById(id: Long): Task?{
         return taskRepository.findById(id).orElse(null)
@@ -28,6 +29,9 @@ class TaskService (val taskRepository: TaskRepository, val taskQueue: TaskQueue)
         createdTo: Instant?,
         pageable: Pageable
     ): Page<Task>{
+        if (createdFrom != null && createdTo != null && createdFrom.isAfter(createdTo)) {
+            throw IllegalArgumentException("createdFrom must be before or equal to createdTo")
+        }
         validateSort(pageable)
         val specification = Specification<Task> { root, _, cb ->
             val predicates = mutableListOf<Predicate>()
@@ -77,6 +81,7 @@ class TaskService (val taskRepository: TaskRepository, val taskQueue: TaskQueue)
         return taskRepository.save(task)
     }
 
+    @Transactional
     fun addToQueue(id: Long): Task {
         val task = taskRepository.findById(id).orElse(null)
             ?: throw TaskNotFoundException(id)
@@ -86,44 +91,40 @@ class TaskService (val taskRepository: TaskRepository, val taskQueue: TaskQueue)
         }
 
         task.status = TaskStatus.QUEUED
-        val savedTask = taskRepository.save(task)
-        taskQueue.addTask(id)
-        return savedTask
+        return task
     }
 
+    @Transactional
+    fun takeNextQueuedTask(): Task? {
+        val id = taskRepository.findNextQueuedTaskIdForUpdate() ?: return null
+        val task = taskRepository.findById(id).orElseThrow { TaskNotFoundException(id) }
 
+        task.status = TaskStatus.PROCESSING
+        task.startedAt = Instant.now()
+        task.errorMessage = null
+        task.result = null
+
+        return task
+    }
+
+    @Transactional
     fun cancelTask(id: Long){
         val task = taskRepository.findById(id).orElse(null)
             ?: throw TaskNotFoundException(id)
 
-        if (task.status == TaskStatus.DONE || task.status == TaskStatus.FAILED) {
-            throw InvalidTaskStatusException("Task with id=$id cannot be canceled because status is ${task.status}")
-        }
         if (task.status == TaskStatus.CANCELED) {
             throw InvalidTaskStatusException("Task with id=$id is already canceled")
         }
-        task.status = TaskStatus.CANCELED
-        taskRepository.save(task)
-    }
-
-    fun setProcessingStatus(id: Long){
-        val task = taskRepository.findById(id).orElse(null)
-            ?: throw TaskNotFoundException(id)
-        if (task.status != TaskStatus.QUEUED) {
-            throw InvalidTaskStatusException("Only QUEUED task can be marked as PROCESSING")
+        if (task.status != TaskStatus.CREATED && task.status != TaskStatus.QUEUED) {
+            throw InvalidTaskStatusException("Only CREATED or QUEUED task can be canceled")
         }
-
-        task.status = TaskStatus.PROCESSING
-        taskRepository.save(task)
+        task.status = TaskStatus.CANCELED
     }
 
+    @Transactional
     fun setDoneStatus(id: Long, result: String) {
         val task = taskRepository.findById(id).orElse(null)
             ?: throw TaskNotFoundException(id)
-
-        if (task.status == TaskStatus.CANCELED) {
-            throw InvalidTaskStatusException("Canceled task cannot be marked as DONE")
-        }
 
         if (task.status != TaskStatus.PROCESSING) {
             throw InvalidTaskStatusException("Only PROCESSING task can be marked as DONE")
@@ -131,21 +132,32 @@ class TaskService (val taskRepository: TaskRepository, val taskQueue: TaskQueue)
 
         task.status = TaskStatus.DONE
         task.result = result
+        task.startedAt = null
         task.errorMessage = null
-        taskRepository.save(task)
     }
 
+    @Transactional
     fun setFailedStatus(id: Long, errorMessage: String){
         val task = taskRepository.findById(id).orElse(null)
             ?: throw TaskNotFoundException(id)
 
-        if (task.status != TaskStatus.QUEUED && task.status != TaskStatus.PROCESSING) {
-            throw InvalidTaskStatusException("Only QUEUED or PROCESSING task can be marked as FAILED")
+        if (task.status != TaskStatus.PROCESSING) {
+            throw InvalidTaskStatusException("Only PROCESSING task can be marked as FAILED")
         }
 
         task.status = TaskStatus.FAILED
         task.result = null
+        task.startedAt = null
         task.errorMessage = errorMessage
-        taskRepository.save(task)
+    }
+
+    @Transactional
+    fun recoverStaleProcessingTasks(timeoutSeconds: Long): Int {
+        val threshold = Instant.now().minusSeconds(timeoutSeconds)
+        return taskRepository.resetStaleProcessingTasks(
+            processingStatus = TaskStatus.PROCESSING,
+            queuedStatus = TaskStatus.QUEUED,
+            threshold = threshold
+        )
     }
 }

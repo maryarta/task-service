@@ -23,9 +23,10 @@ import java.time.Instant
 
 @SpringBootTest
 @Testcontainers
-class DemoApplicationTests(
+class TaskServiceApplicationTests(
 	@Autowired
 	private val taskService: TaskService,
+
 	@Autowired
 	private val taskRepository: TaskRepository
 ) {
@@ -46,7 +47,6 @@ class DemoApplicationTests(
 			registry.add("spring.datasource.username", postgresContainer::getUsername)
 			registry.add("spring.datasource.password", postgresContainer::getPassword)
 		}
-
 	}
 
 	@BeforeEach
@@ -58,21 +58,25 @@ class DemoApplicationTests(
 		file: String,
 		status: TaskStatus = TaskStatus.CREATED,
 		type: TaskType = TaskType.VALIDATE,
-		createdAt: Instant = Instant.now()
+		createdAt: Instant = Instant.now(),
+		startedAt: Instant? = null
 	): Task {
-		return taskRepository.save(
-			Task(
-				file = file,
-				status = status,
-				type = type,
-				createdAt = createdAt
-			)
+		val task = Task(
+			file = file,
+			status = status,
+			type = type,
+			createdAt = createdAt
 		)
+
+		task.startedAt = startedAt
+
+		return taskRepository.save(task)
 	}
 
 	@Test
 	fun `should save tasks to database`() {
 		val savedIds = mutableListOf<Long>()
+
 		for (i in 1..5) {
 			val savedTask = taskService.create(
 				CreateTaskRequest(
@@ -80,6 +84,7 @@ class DemoApplicationTests(
 					type = TaskType.CONVERT
 				)
 			)
+
 			val id = savedTask.id
 			assertNotNull(id)
 			savedIds.add(id)
@@ -89,17 +94,18 @@ class DemoApplicationTests(
 
 		savedIds.forEachIndexed { index, id ->
 			val taskFromDb = taskRepository.findById(id).orElseThrow()
+
 			assertEquals("test${index + 1}.txt", taskFromDb.file)
 			assertEquals(TaskType.CONVERT, taskFromDb.type)
 			assertEquals(TaskStatus.CREATED, taskFromDb.status)
 			assertNotNull(taskFromDb.createdAt)
 		}
-
 	}
 
 	@Test
 	fun `findById should return null when task not found`() {
 		val foundTask = taskService.findById(999L)
+
 		assertNull(foundTask)
 	}
 
@@ -171,13 +177,12 @@ class DemoApplicationTests(
 
 		assertEquals(5, firstPage.totalElements)
 		assertEquals(3, firstPage.totalPages)
-
 		assertEquals(2, firstPage.content.size)
 		assertEquals(2, secondPage.content.size)
 	}
 
 	@Test
-	fun `addToQueue should change status to QUEUED`(){
+	fun `addToQueue should change status to QUEUED`() {
 		val task = saveTask(
 			file = "test.txt",
 			status = TaskStatus.CREATED,
@@ -191,7 +196,6 @@ class DemoApplicationTests(
 		val taskFromDb = taskRepository.findById(task.id!!).orElseThrow()
 
 		assertEquals(TaskStatus.QUEUED, taskFromDb.status)
-
 	}
 
 	@Test
@@ -203,8 +207,117 @@ class DemoApplicationTests(
 		)
 
 		taskService.cancelTask(task.id!!)
+
 		val taskFromDb = taskRepository.findById(task.id!!).orElseThrow()
+
 		assertEquals(TaskStatus.CANCELED, taskFromDb.status)
 	}
 
+	@Test
+	fun `takeNextQueuedTask should move queued task to processing`() {
+		val task = saveTask(
+			file = "test.txt",
+			status = TaskStatus.QUEUED,
+			type = TaskType.VALIDATE
+		)
+
+		val processingTask = taskService.takeNextQueuedTask()
+
+		assertNotNull(processingTask)
+		assertEquals(task.id, processingTask.id)
+		assertEquals(TaskStatus.PROCESSING, processingTask.status)
+		assertNotNull(processingTask.startedAt)
+
+		val taskFromDb = taskRepository.findById(task.id!!).orElseThrow()
+
+		assertEquals(TaskStatus.PROCESSING, taskFromDb.status)
+		assertNotNull(taskFromDb.startedAt)
+	}
+
+	@Test
+	fun `takeNextQueuedTask should return null when there are no queued tasks`() {
+		saveTask(
+			file = "created.txt",
+			status = TaskStatus.CREATED,
+			type = TaskType.VALIDATE
+		)
+
+		saveTask(
+			file = "done.txt",
+			status = TaskStatus.DONE,
+			type = TaskType.VALIDATE
+		)
+
+		val result = taskService.takeNextQueuedTask()
+
+		assertNull(result)
+	}
+
+	@Test
+	fun `setDoneStatus should move processing task to done`() {
+		val task = saveTask(
+			file = "test.txt",
+			status = TaskStatus.PROCESSING,
+			type = TaskType.VALIDATE,
+			startedAt = Instant.now()
+		)
+
+		taskService.setDoneStatus(task.id!!, "File processed successfully")
+
+		val taskFromDb = taskRepository.findById(task.id!!).orElseThrow()
+
+		assertEquals(TaskStatus.DONE, taskFromDb.status)
+		assertEquals("File processed successfully", taskFromDb.result)
+		assertNull(taskFromDb.errorMessage)
+		assertNull(taskFromDb.startedAt)
+	}
+
+	@Test
+	fun `setFailedStatus should move processing task to failed`() {
+		val task = saveTask(
+			file = "test.txt",
+			status = TaskStatus.PROCESSING,
+			type = TaskType.VALIDATE,
+			startedAt = Instant.now()
+		)
+
+		taskService.setFailedStatus(task.id!!, "Processing failed")
+
+		val taskFromDb = taskRepository.findById(task.id!!).orElseThrow()
+
+		assertEquals(TaskStatus.FAILED, taskFromDb.status)
+		assertEquals("Processing failed", taskFromDb.errorMessage)
+		assertNull(taskFromDb.result)
+		assertNull(taskFromDb.startedAt)
+	}
+
+	@Test
+	fun `recoverStaleProcessingTasks should move stale processing tasks to queued`() {
+		val staleTask = saveTask(
+			file = "stale.txt",
+			status = TaskStatus.PROCESSING,
+			type = TaskType.VALIDATE,
+			startedAt = Instant.now().minusSeconds(120)
+		)
+
+		val freshTask = saveTask(
+			file = "fresh.txt",
+			status = TaskStatus.PROCESSING,
+			type = TaskType.VALIDATE,
+			startedAt = Instant.now()
+		)
+
+		val recoveredCount = taskService.recoverStaleProcessingTasks(timeoutSeconds = 60)
+
+		assertEquals(1, recoveredCount)
+
+		val staleTaskFromDb = taskRepository.findById(staleTask.id!!).orElseThrow()
+		val freshTaskFromDb = taskRepository.findById(freshTask.id!!).orElseThrow()
+
+		assertEquals(TaskStatus.QUEUED, staleTaskFromDb.status)
+		assertNull(staleTaskFromDb.startedAt)
+
+		assertEquals(TaskStatus.PROCESSING, freshTaskFromDb.status)
+		assertNotNull(freshTaskFromDb.startedAt)
+	}
 }
