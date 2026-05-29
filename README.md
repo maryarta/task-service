@@ -63,3 +63,10 @@
 | task.processing.polling-delay-ms             | задержка между проверками очереди, если задач нет                    |
 | task.recovery.processing-timeout-seconds     | время, после которого задача в PROCESSING считается зависшей         |
 | task.recovery.fixed-delay-ms                 | периодичность проверки зависших задач                                |
+
+### Запуск в Docker
+
+Проект можно запустить полностью в Docker-контейнерах.
+
+```bash
+docker compose up --build
